@@ -1,0 +1,4 @@
+name: Factions
+version: '${project.version}'
+main: com.redsifter.factions.Factions
+api-version: 1.19
