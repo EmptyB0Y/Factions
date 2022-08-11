@@ -1,27 +1,26 @@
 package com.redsifter.factions;
 
 import com.redsifter.factions.files.FileManager;
-
 import com.redsifter.factions.listener.Listen;
+
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
+import org.bukkit.Location;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
-import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
-import javax.security.auth.login.Configuration;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
-import java.util.Objects;
-import java.util.function.Supplier;
 
 public final class Factions extends JavaPlugin {
 
     public static FileManager fm;
+    public static HashMap<String,ArrayList<String>> noclaimchunks = new HashMap<>();
 
     @Override
     public void onEnable() {
@@ -33,6 +32,19 @@ public final class Factions extends JavaPlugin {
             throw new RuntimeException(e);
         }
         this.saveDefaultConfig();
+        List<Location> zones = null;
+        try {
+            for(String z : fm.getConfig().getConfigurationSection("no-claim-zones").getKeys(false)){
+                zones = (List<Location>) fm.getConfig().getList("no-claim-zones."+z);
+                Bukkit.getLogger().info(""+zones.get(0));
+                Bukkit.getLogger().info(""+zones.get(1));
+                Bukkit.getLogger().info("Setting up no-claim zone : "+z);
+                setNoClaimZone(zones.get(0),zones.get(1),z);
+            }
+        } catch (FileNotFoundException e) {
+            throw new RuntimeException(e);
+        }
+        Bukkit.getLogger().info(""+noclaimchunks);
 
     }
 
@@ -99,6 +111,10 @@ public final class Factions extends JavaPlugin {
                             sender.sendMessage(ChatColor.RED+"This chunk is taken by "+factionOfChunk+" !");
                             return false;
                         }
+                        else if(!isChunkClaimable(Long.toString(((Player)sender).getLocation().getChunk().getChunkKey())).equals("")){
+                            sender.sendMessage(ChatColor.RED+"This chunk is in a no-claim zone !");
+                            return false;
+                        }
 
                         List<String> chunks = fm.getConfig().getStringList("factions."+factionOfPlayer+".chunks");
                         chunks.add(Long.toString(((Player)sender).getLocation().getChunk().getChunkKey()));
@@ -141,19 +157,427 @@ public final class Factions extends JavaPlugin {
                 case "disband":
                     try {
                         String factionOfPlayer = playerHasFaction((Player)sender);
-                        if(!Objects.equals(fm.getConfig().getString("factions." + factionOfPlayer + ".owner"), sender.getName())){
-                            sender.sendMessage(ChatColor.RED+"You are not the owner of the faction !");
-                            return false;
+                        try {
+                            if(factionOfPlayer.equals("")){
+                                sender.sendMessage(ChatColor.RED+"You do not have a faction !");
+                                return false;
+                            }
+                            else if(!playerIsOwner(factionOfPlayer,(Player)sender)){
+                                sender.sendMessage(ChatColor.RED+"You are not the owner of the faction !");
+                            }
+                        } catch (FileNotFoundException e) {
+                            throw new RuntimeException(e);
                         }
                         deleteFaction(factionOfPlayer);
                         sender.sendMessage(ChatColor.GREEN+"You successfully deleted your faction !");
-                        return false;
                     } catch (IOException e) {
                         throw new RuntimeException(e);
                     }
+                    break;
+                case "invite":
+                    if(args.length < 2){
+                        sender.sendMessage(ChatColor.RED+"Missing argument : /f invite <NAME> !");
+                        return false;
+                    }
+                    try {
+                        if(playerHasFaction((Player) sender).equals("")){
+                            sender.sendMessage(ChatColor.RED+"You do not have a faction !");
+                            return false;
+                        }
+                    } catch (FileNotFoundException e) {
+                        throw new RuntimeException(e);
+                    }
+                    if(Bukkit.getPlayer(args[1]) != null) {
+                        try {
+                            playerInvite(playerHasFaction((Player) sender), Bukkit.getPlayer(args[1]));
+                            sender.sendMessage(ChatColor.GREEN +" Successfully invited"+ args[1]+" to your faction !");
+                            Bukkit.getPlayer(args[1]).sendMessage(ChatColor.GREEN+"You have been invited to join "+ChatColor.GOLD+playerHasFaction((Player) sender)+ChatColor.GREEN+" !");
+
+                        } catch (IOException e) {
+                            throw new RuntimeException(e);
+                        }
+                    }
+                    break;
+                case "join":
+                    if(args.length < 2){
+                        sender.sendMessage(ChatColor.RED+"Missing argument : /f join <NAME> !");
+                        return false;
+                    }
+                    try {
+                        if(!fm.getConfig().isConfigurationSection("factions."+args[1])){
+                            sender.sendMessage(ChatColor.RED+"Faction not found !");
+                            return false;
+                        }
+                    } catch (FileNotFoundException e) {
+                        throw new RuntimeException(e);
+                    }
+                    try {
+                        if(fm.getConfig().isConfigurationSection("factions."+args[1])){
+                            if(playerJoin(args[1],(Player)sender)){
+                                sender.sendMessage(ChatColor.GREEN+"You successfully joined "+ChatColor.GOLD+playerHasFaction((Player) sender)+ChatColor.GREEN+" !");
+                            }
+                            else{
+                                sender.sendMessage(ChatColor.DARK_GREEN+"You successfully requested to join "+ChatColor.GOLD+playerHasFaction((Player) sender)+ChatColor.GREEN+" !");
+                            }
+
+                        }
+                    } catch (IOException e) {
+                        throw new RuntimeException(e);
+                    }
+                    break;
+                case "leave":
+                    try {
+                        if(playerHasFaction((Player)sender).equals("")){
+                            sender.sendMessage(ChatColor.RED+"You are not in any faction");
+                            return false;
+                        }
+                        playerLeave(playerHasFaction((Player) sender),(Player) sender);
+                        sender.sendMessage(ChatColor.GREEN+"You successfully left "+ChatColor.GOLD+playerHasFaction((Player) sender)+ ChatColor.GREEN+" !");
+                    } catch (IOException e) {
+                        throw new RuntimeException(e);
+                    }
+                    break;
+                case "accept":
+                    if(args.length < 2){
+                        sender.sendMessage(ChatColor.RED+"Missing argument : /f accept <NAME> !");
+                        return false;
+                    }
+                    try {
+                        if(playerHasFaction((Player)sender).equals("")){
+                            sender.sendMessage(ChatColor.RED+"You do not have a faction !");
+                            return false;
+                        }
+                        else if(!playerIsOwner(playerHasFaction((Player) sender),(Player)sender)){
+                            sender.sendMessage(ChatColor.RED+"You are not the owner of the faction !");
+                        }
+                    } catch (FileNotFoundException e) {
+                        throw new RuntimeException(e);
+                    }
+                    if(Bukkit.getPlayer(args[1]) != null) {
+                        try {
+                            if (playerAccept(playerHasFaction((Player) sender), Bukkit.getPlayer(args[1]))) {
+                                sender.sendMessage(ChatColor.GREEN + args[1]+" successfully joined your faction !");
+
+                            } else {
+                                sender.sendMessage(ChatColor.RED + "This player has not requested to join your faction !");
+                            }
+                        } catch (IOException e) {
+                            throw new RuntimeException(e);
+                        }
+                    }
+                    else{
+                        sender.sendMessage(ChatColor.RED+"Player not found !");
+                    }
+                    break;
+                case "deny":
+                    if(args.length < 2){
+                        sender.sendMessage(ChatColor.RED+"Missing argument : /f deny <NAME> !");
+                        return false;
+                    }
+                    try {
+                        if(playerHasFaction((Player)sender).equals("")){
+                            sender.sendMessage(ChatColor.RED+"You do not have a faction !");
+                            return false;
+                        }
+                        else if(!playerIsOwner(playerHasFaction((Player) sender),(Player)sender)){
+                            sender.sendMessage(ChatColor.RED+"You are not the owner of the faction !");
+                        }
+                    } catch (FileNotFoundException e) {
+                        throw new RuntimeException(e);
+                    }
+                    if(Bukkit.getPlayer(args[1]) != null) {
+                        try {
+                            if (playerDeny(playerHasFaction((Player) sender), Bukkit.getPlayer(args[1]))) {
+                                sender.sendMessage(ChatColor.GREEN + args[1]+"'s request to join your faction was denied !");
+
+                            } else {
+                                sender.sendMessage(ChatColor.RED + "This player has not requested to join your faction !");
+                            }
+                        } catch (IOException e) {
+                            throw new RuntimeException(e);
+                        }
+                    }
+                    else{
+                        sender.sendMessage(ChatColor.RED+"Player not found !");
+                    }
+                    break;
+                case "allowClaim":
+                    try {
+                        if(playerHasFaction((Player)sender).equals("")){
+                            sender.sendMessage(ChatColor.RED+"You do not have a faction !");
+                            return false;
+                        }
+                        else if(!playerIsOwner(playerHasFaction((Player) sender),(Player)sender)){
+                            sender.sendMessage(ChatColor.RED+"You are not the owner of the faction !");
+                        }
+                    } catch (FileNotFoundException e) {
+                        throw new RuntimeException(e);
+                    }
+                    if(args.length < 2){
+                        try {
+                            allowClaimAll(playerHasFaction((Player) sender));
+                            sender.sendMessage(ChatColor.DARK_GRAY+"You allowed all the players of your factions from claiming chunks !");
+
+                            return true;
+                        } catch (IOException e) {
+                            throw new RuntimeException(e);
+                        }
+                    }
+                    if(Bukkit.getPlayer(args[1]) != null) {
+                        try {
+                            allowClaim(playerHasFaction((Player) sender), Bukkit.getPlayer(args[1]));
+                        } catch (IOException e) {
+                            throw new RuntimeException(e);
+                        }
+                    }
+                    else{
+                        sender.sendMessage(ChatColor.RED+"Player not found !");
+                    }
+                    break;
+                case "disallowClaim":
+                    try {
+                        if(playerHasFaction((Player)sender).equals("")){
+                            sender.sendMessage(ChatColor.RED+"You do not have a faction !");
+                            return false;
+                        }
+                        else if(!playerIsOwner(playerHasFaction((Player) sender),(Player)sender)){
+                            sender.sendMessage(ChatColor.RED+"You are not the owner of the faction !");
+                        }
+                    } catch (FileNotFoundException e) {
+                        throw new RuntimeException(e);
+                    }
+                    if(args.length < 2){
+                        try {
+                            disallowClaimAll(playerHasFaction((Player) sender));
+                            sender.sendMessage(ChatColor.DARK_GRAY+"You disallowed all the players of your factions from claiming chunks !");
+                            return true;
+                        } catch (IOException e) {
+                            throw new RuntimeException(e);
+                        }
+                    }
+                    else if(Bukkit.getPlayer(args[1]) != null) {
+                        try {
+                            disallowClaim(playerHasFaction((Player) sender), Bukkit.getPlayer(args[1]));
+                        } catch (IOException e) {
+                            throw new RuntimeException(e);
+                        }
+                    }
+                    else{
+                        sender.sendMessage(ChatColor.RED+"Player not found !");
+                    }
+                    break;
+                default:
+                    sender.sendMessage(ChatColor.GOLD+"f create <NAME>:"+ChatColor.GRAY+"Create faction");
+                    sender.sendMessage(ChatColor.GOLD+"f claim :"+ChatColor.GRAY+"Claim chunk");
+                    sender.sendMessage(ChatColor.GOLD+"f unclaim:"+ChatColor.GRAY+"Unclaim chunk");
+                    sender.sendMessage(ChatColor.GOLD+"f disband :"+ChatColor.GRAY+"Disband faction");
+                    sender.sendMessage(ChatColor.GOLD+"f invite <NAME> :"+ChatColor.GRAY+"Invite player to faction");
+                    sender.sendMessage(ChatColor.GOLD+"f join <NAME>:"+ChatColor.GRAY+"Join faction");
+                    sender.sendMessage(ChatColor.GOLD+"f leave:"+ChatColor.GRAY+"Leave faction");
+                    sender.sendMessage(ChatColor.GOLD+"f accept <NAME>:"+ChatColor.GRAY+"Accept player into faction");
+                    sender.sendMessage(ChatColor.GOLD+"f deny <NAME>:"+ChatColor.GRAY+"Deny player of getting into faction");
+                    sender.sendMessage(ChatColor.GOLD+"f allowClaim [NAME]:"+ChatColor.GRAY+"Allow a player to claim, allow all player if NAME is not specified");
+                    sender.sendMessage(ChatColor.GOLD+"f disallowClaim [NAME]:"+ChatColor.GRAY+"Disallow a player to claim, Disallow all player if NAME is not specified");
+            }
+        }
+        else if(label.equals("fadmin"))
+            {
+            switch (args[0]){
+                case "noclaim":
+                    if(!Listen.selector.containsKey((Player) sender)) {
+                        Listen.selector.put((Player) sender, null);
+                        sender.sendMessage(ChatColor.GREEN+"Noclaim selector ON !");
+                    }
+                    else{
+                        Listen.selector.remove((Player) sender);
+                        sender.sendMessage(ChatColor.GREEN+"Noclaim selector OFF !");
+                    }
+                    break;
+                case "set":
+                    if(args.length < 2){
+                        sender.sendMessage(ChatColor.RED+"You must set a name for your no-claim zone");
+                        return false;
+                    }
+                    if(Listen.selector.get((Player) sender).length == 2) {
+                        try {
+                            setNoClaim(args[1],Listen.selector.get((Player) sender)[0],Listen.selector.get((Player) sender)[1]);
+                            sender.sendMessage(ChatColor.GREEN+"No-claim zone defined successfully !");
+                        } catch (IOException e) {
+                            throw new RuntimeException(e);
+                        }
+                        Listen.selector.put((Player) sender, null);
+                    }
+                    else{
+                        sender.sendMessage(ChatColor.RED+"You have not selected a region !");
+                    }
+                    break;
             }
         }
         return true;
+    }
+
+    public static String isChunkClaimable(String key) throws FileNotFoundException {
+        fm.reloadConfig();
+        for(String z : fm.getConfig().getConfigurationSection("no-claim-zones").getKeys(false)){
+           if(noclaimchunks.get(z).contains(key)){
+               return z;
+            }
+        }
+        return "";
+    }
+    public void setNoClaimZone(Location l1, Location l2,String name){
+
+        noclaimchunks.put(name,new ArrayList<>());
+        double l1x = l1.getX();
+        double l2x = l2.getX();
+        String resultx = "";
+
+        double l1z = l1.getZ();
+        double l2z = l2.getZ();
+        String resultz = "";
+
+        //X coord
+        if(l1x > 0 && l2x > 0){
+            if(l1x > l2x){
+                //l1 >
+                resultx = ">";
+            }
+            else if(l1x == l2x ) {
+                //l1 =
+                resultx = "=";
+            }
+            else{
+                //l1 <
+                resultx = "<";
+            }
+        }
+        else if(l1x < 0 && l2x < 0){
+            if(l1x > l2x){
+                //l1 <
+                resultx = ">";
+
+            }
+            else if(l1x == l2x) {
+                //l1 =
+                resultx = "=";
+            }
+            else{
+                //l1 >
+                resultx = "<";
+            }
+        }
+        else if(l1x < 0 && l2x > 0){
+            //l1 <
+            resultx = "<";
+
+        }
+        else{
+            //l1 >
+            resultx = ">";
+        }
+
+        //Z coord
+        if(l1z > 0 && l2z > 0){
+            if(l1z > l2z){
+                //l1 >
+                resultz = ">";
+            }
+            else if(l1z == l2z) {
+                //l1 =
+                resultz = "=";
+            }
+            else{
+                //l1 <
+                resultz = "<";
+            }
+        }
+        else if(l1z < 0 && l2z < 0){
+            if(l1z > l2z){
+                //l1 <
+                resultz = ">";
+
+            }
+            else if(l1z == l2z) {
+                //l1 =
+                resultz = "=";
+            }
+            else{
+                //l1 >
+                resultz = "<";
+            }
+        }
+        else if(l1z < 0 && l2z > 0){
+            //l1 <
+            resultz = "<";
+
+        }
+        else{
+            //l1 >
+            resultz = ">";
+        }
+
+
+
+        if(resultx.equals("=") && resultz.equals("=")){
+            Bukkit.getLogger().info("=");
+            noclaimchunks.get(name).add(Long.toString(l1.getChunk().getChunkKey()));
+        }
+        else if(resultx.equals(">") && resultz.equals(">")){
+            Bukkit.getLogger().info(">");
+            Location l = null;
+            for(double x = l2x;x < l1x;x++){
+                for(double z = l2z; x < l1z; x++){
+                    l = new Location(l1.getWorld(),x,0,z);
+                    if(!noclaimchunks.get(name).contains(Long.toString(l.getChunk().getChunkKey()))) {
+                        noclaimchunks.get(name).add(Long.toString(l.getChunk().getChunkKey()));
+                    }
+                }
+            }
+        }
+        else if(resultx.equals("<") && resultz.equals("<")){
+            Bukkit.getLogger().info("<");
+            Location l = null;
+            for(double x = l2x;x > l1x;x--){
+                for(double z = l2z;z > l1z; z--){
+                    l = new Location(l1.getWorld(),x,0,z);
+                    if(!noclaimchunks.get(name).contains(Long.toString(l.getChunk().getChunkKey()))) {
+                        noclaimchunks.get(name).add(Long.toString(l.getChunk().getChunkKey()));
+                    }
+                }
+            }
+        }
+        else if(resultx.equals(">") && resultz.equals("<")){
+            Bukkit.getLogger().info("><");
+            Location l = null;
+            for(double x = l2x;x < l1x;x++){
+                for(double z = l2z;z > l1z; z--){
+                    l = new Location(l1.getWorld(),x,0,z);
+                    if(!noclaimchunks.get(name).contains(Long.toString(l.getChunk().getChunkKey()))) {
+                        noclaimchunks.get(name).add(Long.toString(l.getChunk().getChunkKey()));
+                    }
+                }
+            }
+        }
+        else if(resultx.equals("<") && resultz.equals(">")){
+            Bukkit.getLogger().info("<>");
+            Location l = null;
+            for(double x = l2x;x > l1x;x--){
+                for(double z = l2z;z < l1z; z++){
+                    l = new Location(l1.getWorld(),x,0,z);
+                    if(!noclaimchunks.get(name).contains(Long.toString(l.getChunk().getChunkKey()))) {
+                        noclaimchunks.get(name).add(Long.toString(l.getChunk().getChunkKey()));
+                    }
+                }
+            }
+        }
+    }
+    public void setNoClaim(String name,Location l1, Location l2) throws IOException {
+        fm.reloadConfig();
+        List<Location> locations = new ArrayList<>();
+        locations.add(l1);
+        locations.add(l2);
+        fm.getConfig().set("no-claim-zones."+name,locations);
+        fm.saveConfig();
     }
 
     public boolean nameIsTaken(String str) throws FileNotFoundException {
@@ -200,6 +624,96 @@ public final class Factions extends JavaPlugin {
     public void deleteFaction(String f) throws IOException {
         fm.reloadConfig();
         fm.getConfig().set("factions."+f,null);
+        fm.saveConfig();
+    }
+
+    public void playerInvite(String f,Player p) throws IOException {
+        fm.reloadConfig();
+        fm.getConfig().set("factions."+f+".invited."+p.getName(),((System.currentTimeMillis()/1000)/60)/60+"/h");
+        fm.saveConfig();
+    }
+
+    public boolean playerJoin(String f, Player p) throws IOException {
+        fm.reloadConfig();
+        if(fm.getConfig().isConfigurationSection("factions."+f+".invited."+p.getName())){
+            fm.getConfig().set("factions."+f+".invited."+p.getName(),null);
+            fm.getConfig().set("factions."+f+".players."+p.getName()+".canClaim",false);
+            return true;
+        }
+        else{
+            fm.getConfig().set("factions."+f+".requesting."+p.getName(),((System.currentTimeMillis()/1000)/60)/60+"/h");
+        }
+        fm.saveConfig();
+        return false;
+    }
+    public boolean playerAccept(String f, Player p) throws IOException {
+        fm.reloadConfig();
+        if(fm.getConfig().isConfigurationSection("factions."+f+".requesting."+p.getName())){
+            fm.getConfig().set("factions."+f+".requesting."+p.getName(),null);
+            fm.getConfig().set("factions."+f+".players."+p.getName()+".canClaim",false);
+        }
+        else{
+            return false;
+        }
+        fm.saveConfig();
+        return true;
+    }
+
+    public boolean playerDeny(String f, Player p) throws IOException {
+        fm.reloadConfig();
+        if(fm.getConfig().isConfigurationSection("factions."+f+".requesting."+p.getName())){
+            fm.getConfig().set("factions."+f+".requesting."+p.getName(),null);
+        }
+        else{
+            return false;
+        }
+        fm.saveConfig();
+        return true;
+    }
+    public void playerLeave(String f,Player p) throws IOException {
+        fm.reloadConfig();
+        fm.getConfig().set("factions."+playerHasFaction(p)+".players."+p.getName(),null);
+        fm.saveConfig();
+    }
+
+    public boolean playerIsOwner(String f,Player p) throws FileNotFoundException {
+        fm.reloadConfig();
+        if(fm.getConfig().getString("factions."+f+".owner").equals(p.getName())){
+            return true;
+        }
+        return false;
+    }
+
+    public void allowClaim(String f, Player p) throws IOException {
+        fm.reloadConfig();
+        fm.getConfig().set("factions."+f+".players."+p.getName()+".canClaim",true);
+        fm.saveConfig();
+    }
+
+    public void allowClaimAll(String f) throws IOException {
+        fm.reloadConfig();
+        for(String p : fm.getConfig().getConfigurationSection("factions."+f+".players").getKeys(false)) {
+            fm.getConfig().set("factions."+f+".players."+p+".canClaim",true);
+        }
+        fm.saveConfig();
+
+    }
+    public void disallowClaim(String f, Player p) throws IOException {
+            fm.reloadConfig();
+            if(fm.getConfig().isConfigurationSection("factions."+f+".owner."+p)){
+                p.sendMessage(ChatColor.RED+"You cannot disallow yourself from claiming chunks !");
+                return;
+            }
+            fm.getConfig().set("factions."+f+".players."+p.getName()+".canClaim",false);
+            fm.saveConfig();
+        }
+    public void disallowClaimAll(String f) throws IOException {
+        fm.reloadConfig();
+        for(String p : fm.getConfig().getConfigurationSection("factions."+f+".players").getKeys(false)) {
+            if(!fm.getConfig().isConfigurationSection("factions."+f+".owner."+p)) {
+                fm.getConfig().set("factions." + f + ".players." + p + ".canClaim", false);
+            }
+        }
         fm.saveConfig();
     }
 }
