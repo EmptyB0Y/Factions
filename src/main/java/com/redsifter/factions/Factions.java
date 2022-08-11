@@ -54,6 +54,9 @@ public final class Factions extends JavaPlugin {
     }
 
     public boolean onCommand(CommandSender sender, Command cmd, String label, String[] args) {
+        if(args.length == 0){
+            args = new String[]{""};
+        }
         if(label.equals("f")) {
             switch (args[0]) {
                 case "create":
@@ -367,17 +370,19 @@ public final class Factions extends JavaPlugin {
                     }
                     break;
                 default:
-                    sender.sendMessage(ChatColor.GOLD+"f create <NAME>:"+ChatColor.GRAY+"Create faction");
-                    sender.sendMessage(ChatColor.GOLD+"f claim :"+ChatColor.GRAY+"Claim chunk");
-                    sender.sendMessage(ChatColor.GOLD+"f unclaim:"+ChatColor.GRAY+"Unclaim chunk");
+                    sender.sendMessage(ChatColor.GOLD+"-----------------------------------------------------");
+                    sender.sendMessage(ChatColor.GOLD+"FACTIONS COMMANDS :");
+                    sender.sendMessage(ChatColor.GOLD+"f create <NAME> : "+ChatColor.GRAY+"Create faction");
+                    sender.sendMessage(ChatColor.GOLD+"f claim : "+ChatColor.GRAY+"Claim chunk");
+                    sender.sendMessage(ChatColor.GOLD+"f unclaim :"+ChatColor.GRAY+"Unclaim chunk");
                     sender.sendMessage(ChatColor.GOLD+"f disband :"+ChatColor.GRAY+"Disband faction");
                     sender.sendMessage(ChatColor.GOLD+"f invite <NAME> :"+ChatColor.GRAY+"Invite player to faction");
-                    sender.sendMessage(ChatColor.GOLD+"f join <NAME>:"+ChatColor.GRAY+"Join faction");
+                    sender.sendMessage(ChatColor.GOLD+"f join <NAME> :"+ChatColor.GRAY+"Join faction");
                     sender.sendMessage(ChatColor.GOLD+"f leave:"+ChatColor.GRAY+"Leave faction");
-                    sender.sendMessage(ChatColor.GOLD+"f accept <NAME>:"+ChatColor.GRAY+"Accept player into faction");
-                    sender.sendMessage(ChatColor.GOLD+"f deny <NAME>:"+ChatColor.GRAY+"Deny player of getting into faction");
-                    sender.sendMessage(ChatColor.GOLD+"f allowClaim [NAME]:"+ChatColor.GRAY+"Allow a player to claim, allow all player if NAME is not specified");
-                    sender.sendMessage(ChatColor.GOLD+"f disallowClaim [NAME]:"+ChatColor.GRAY+"Disallow a player to claim, Disallow all player if NAME is not specified");
+                    sender.sendMessage(ChatColor.GOLD+"f accept <NAME> :"+ChatColor.GRAY+"Accept player into faction");
+                    sender.sendMessage(ChatColor.GOLD+"f deny <NAME> :"+ChatColor.GRAY+"Deny player of getting into faction");
+                    sender.sendMessage(ChatColor.GOLD+"f allowClaim [NAME] :"+ChatColor.GRAY+"Allow a player to claim, allow all player if NAME is not specified");
+                    sender.sendMessage(ChatColor.GOLD+"f disallowClaim [NAME] :"+ChatColor.GRAY+"Disallow a player to claim, Disallow all player if NAME is not specified");
             }
         }
         else if(label.equals("fadmin"))
@@ -411,6 +416,11 @@ public final class Factions extends JavaPlugin {
                         sender.sendMessage(ChatColor.RED+"You have not selected a region !");
                     }
                     break;
+                default:
+                    sender.sendMessage(ChatColor.GOLD+"-----------------------------------------------------");
+                    sender.sendMessage(ChatColor.GOLD+"FACTIONS ADMIN COMMANDS :");
+                    sender.sendMessage(ChatColor.GOLD+"fadmin noclaim : "+ChatColor.GRAY+"Toggle no-claim zone setter");
+                    sender.sendMessage(ChatColor.GOLD+"fadmin set : "+ChatColor.GRAY+"Set no-claim zone");
             }
         }
         return true;
