@@ -1,0 +1,8 @@
+#The fee the members of a faction need to pay for each chunk in order to maintain their chunks property
+chunk-holding-fee: 100
+#The delay wich Factions waits before charging the members for the chunk holding fee (in days)
+chunk-holding-fee-delay: 30
+#The number of chunks that will be unclaimed each unpaid-chunk-delau if the fees are not paid for
+unpaid-chunk-unclaim-rate: 5
+#The delay wich Factions waits for before unclaiming unpaid chunks after the first unclaiming (in days)
+unpaid-chunk-unclaim-delay: 2

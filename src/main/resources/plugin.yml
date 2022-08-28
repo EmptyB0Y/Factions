@@ -1,4 +1,12 @@
 name: Factions
 version: '${project.version}'
 main: com.redsifter.factions.Factions
-api-version: 1.19
+api-version: 1.17
+author: redsifter
+commands:
+  f:
+    description: Factions user commands
+    permission: factions.f
+  fadmin:
+    description: Factions admin commands
+    permission: factions.fadmin
